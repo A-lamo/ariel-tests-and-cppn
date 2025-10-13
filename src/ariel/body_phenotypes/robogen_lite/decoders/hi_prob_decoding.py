@@ -1,30 +1,26 @@
-"""Example of high-probability-decoding for graphs.
+"""Highest-probability-decoding algorithm for ARIEL-robots.
 
-Author:     jmdm
-Date:       2025-06-25
-Py Ver:     3.12
-OS:         macOS  Sequoia 15.3.1
-Hardware:   M4 Pro
-Status:     To Improve ⬆️
-
-Notes
+Note
 -----
-    * Graphs are represented as directed graphs (DiGraph) using NetworkX.
+* Graphs are represented as directed graphs (DiGraph) using NetworkX.
+* Graphs are saved as JSON [1]_.
 
 References
 ----------
-    [1] https://networkx.org/documentation/stable/reference/readwrite/generated/networkx.readwrite.json_graph.tree_data.html#networkx.readwrite.json_graph.tree_data
-
+.. [1] `NetworkX JSON Graph <https://networkx.org/documentation/stable/reference/readwrite/generated/networkx.readwrite.json_graph.tree_data.html#networkx.readwrite.json_graph.tree_data>`_
 Todo
 ----
-    [ ] for loops to be replaced with vectorized operations
-    [ ] DiGraph positioning use cartesian coordinates instead of spring layout
-    [ ] Should probably move the graph functions to a separate script
-
+- [ ] for loops to be replaced with vectorized operations
+- [ ] DiGraph positioning use cartesian coordinates instead of spring layout
+- [ ] Should probably move the graph functions to a separate script
 """
 
-# Standard library
+# Evaluate type annotations in a deferred manner (ruff: UP037)
+from __future__ import annotations
+
 import json
+
+# Standard library
 from pathlib import Path
 from typing import Any
 
@@ -33,10 +29,11 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 import numpy.typing as npt
-from networkx import DiGraph, Graph
+from networkx import DiGraph
 from networkx.readwrite import json_graph
 
 # Local libraries
+from ariel import log
 from ariel.body_phenotypes.robogen_lite.config import (
     ALLOWED_FACES,
     ALLOWED_ROTATIONS,
@@ -54,6 +51,9 @@ DPI = 300
 
 # Global functions
 RNG = np.random.default_rng(SEED)
+
+# Numpy print options
+np.set_printoptions(precision=3, suppress=True, floatmode="fixed")
 
 
 class HighProbabilityDecoder:
@@ -74,24 +74,24 @@ class HighProbabilityDecoder:
         self._graph: dict[int, ModuleInstance] = {}
 
         # NetworkX graph
-        self.graph: Graph[Any] = nx.DiGraph()
+        self.graph: DiGraph[Any] = nx.DiGraph()
 
     def probability_matrices_to_graph(
         self,
         type_probability_space: npt.NDArray[np.float32],
         connection_probability_space: npt.NDArray[np.float32],
         rotation_probability_space: npt.NDArray[np.float32],
-    ) -> DiGraph:
+    ) -> DiGraph[Any]:
         """
         Convert probability matrices to a graph.
 
         Parameters
         ----------
-        type_probability_space : npt.NDArray[np.float32]
+        type_probability_space
             Probability space for module types.
-        connection_probability_space : npt.NDArray[np.float32]
+        connection_probability_space
             Probability space for connections between modules.
-        rotation_probability_space : npt.NDArray[np.float32]
+        rotation_probability_space
             Probability space for module rotations.
 
         Returns
@@ -99,6 +99,11 @@ class HighProbabilityDecoder:
         DiGraph
             A graph representing the decoded modules and their connections.
         """
+        # Reset the graph
+        self._graph: dict[int, ModuleInstance] = {}
+        self.graph: DiGraph[Any] = nx.DiGraph()
+
+        # Store the probability spaces
         self.type_p_space = type_probability_space
         self.conn_p_space = connection_probability_space
         self.rot_p_space = rotation_probability_space
@@ -118,109 +123,144 @@ class HighProbabilityDecoder:
 
     def generate_networkx_graph(self) -> None:
         """Generate a NetworkX graph from the decoded graph."""
-        for parent, module_instance in self._graph.items():
+        for node in self.nodes:
             self.graph.add_node(
-                parent,
-                type=module_instance.type.name,
-                rotation=module_instance.rotation.name,
+                node,
+                type=self.type_dict[node].name,
+                rotation=self.rot_dict[node].name,
             )
-            for face, child in module_instance.links.items():
-                self.graph.add_node(
-                    child,
-                    type=self._graph[child].type.name,
-                    rotation=self._graph[child].rotation.name,
-                )
-
-                self.graph.add_edge(
-                    parent,
-                    child,
-                    face=face.name,
-                )
+        for edges in self.edges:
+            parent, child, face = edges
+            self.graph.add_edge(
+                parent,
+                child,
+                face=ModuleFaces(face).name,
+            )
 
     def decode_probability_to_graph(
         self,
     ) -> None:
-        """Decode the probability spaces into a graph."""
+        """
+        Decode the probability spaces into a graph.
+
+        Raises
+        ------
+        ValueError
+            If an attempt is made to use the core module as a child.
+        ValueError
+            If an attempt is made to instantiate a NONE module as a parent.
+        ValueError
+            If an attempt is made to instantiate a NONE module as a child.
+        """
+        # Create a dictionary to track instantiated modules
+        pre_nodes = dict.fromkeys(range(self.num_modules), 0)
+
+        # The core module is always instantiated
+        pre_nodes[IDX_OF_CORE] = 1
+
+        # Remove 'None' modules from instantiated modules
+        for type_idx, module_type in self.type_dict.items():
+            if module_type == ModuleType.NONE:
+                del pre_nodes[type_idx]
+
+        # List to hold edges (parent, child, face)
+        self.edges = []
+
+        # Available faces for connections
         available_faces = np.zeros_like(self.conn_p_space)
         available_faces[IDX_OF_CORE, :, :] = 1.0
-        selected_faces = np.zeros_like(self.conn_p_space)
+        for _ in range(len(pre_nodes)):
+            # Get the current state of the connection probability space
+            current_state = self.conn_p_space * available_faces
 
-        for _ in range(self.num_modules):
-            # Contrast the connection probabilities with the available faces
-            current_space = available_faces * self.conn_p_space
-
-            # Get index of max values
+            # Find the maximum value in the connection probability space
             max_index = np.unravel_index(
-                np.argmax(current_space),
-                current_space.shape,
-            )
-            x, y, z = max_index
-
-            # Get parent and child types and rotations
-            parent_type = ModuleType(int(np.argmax(self.type_p_space[x])))
-            parent_rotation = ModuleRotationsIdx(
-                int(np.argmax(self.rot_p_space[x])),
-            )
-            child_type = ModuleType(int(np.argmax(self.type_p_space[y])))
-            child_rotation = ModuleRotationsIdx(
-                int(np.argmax(self.rot_p_space[y])),
+                np.argmax(current_state),
+                current_state.shape,
             )
 
-            # Get max value, and check if it is zero, if so, break
-            max_value = current_space[x, y, z]
-            if max_value == 0.0:
+            # Convert to list for easier manipulation
+            max_index = [int(i) for i in max_index]
+            from_module, to_module, conn_face = max_index
+
+            # Check if the maximum value is zero (no more connections)
+            value_at_max = current_state[from_module, to_module, conn_face]
+            if value_at_max == 0.0:
+                msg = "No more connections can be made."
+                log.debug(msg)
                 break
 
-            # Enable newly connected block
-            available_faces[y, :, :] = 1.0
+            # Ensure the core module is never a child
+            if to_module == IDX_OF_CORE:
+                msg = "Cannot connect to the core module as a child.\n"
+                msg += "This indicates an error in decoding."
+                raise ValueError(msg)
 
-            # Avoid re-selection
-            self.conn_p_space[x, :, z] = 0.0  # disable taken face
-            self.conn_p_space[:, y, :] = 0.0  # child has only one parent
+            # Ensure no NONE modules are instantiated
+            if self.type_dict[to_module] == ModuleType.NONE:
+                msg = "Cannot instantiate a NONE module.\n"
+                msg += "This indicates an error in decoding."
+                raise ValueError(msg)
 
-            # Update selected faces
-            selected_faces[x, y, z] = 1.0
+            if self.type_dict[from_module] == ModuleType.NONE:
+                msg = "Cannot instantiate a NONE module.\n"
+                msg += "This indicates an error in decoding."
+                raise ValueError(msg)
 
-            # Update graph with new edge
-            parent: int = int(x)
-            child: int = int(y)
-            face: int = int(z)
+            # Get module types and rotations
+            self.edges.append(
+                (from_module, to_module, conn_face),
+            )
 
-            # If the child is not in the final graph, add it
-            if child not in self._graph:
-                self._graph[child] = ModuleInstance(
-                    type=child_type,
-                    rotation=child_rotation,
-                    links={},
-                )
+            # Update instantiated modules
+            pre_nodes[to_module] = 1
 
-            # If the parent is not in the final graph, add it
-            if parent not in self._graph:
-                self._graph[parent] = ModuleInstance(
-                    type=parent_type,
-                    rotation=parent_rotation,
-                    links={
-                        ModuleFaces(face): child,
-                    },
-                )
-            else:
-                # If the parent is already in the graph, update its links
-                self._graph[parent].links[ModuleFaces(face)] = child
+            # Disable taken face
+            self.conn_p_space[from_module, :, conn_face] = 0.0
+
+            # Child has only one parent
+            self.conn_p_space[:, to_module, :] = 0.0
+
+            # Update available faces
+            available_faces[to_module, :, :] = 1.0
+
+        # Nodes and edges of the final graph
+        self.nodes = {i for i in pre_nodes if pre_nodes[i] == 1}
 
     def set_module_types_and_rotations(self) -> None:
         """Set the module types and rotations using probability spaces."""
-        for i in range(self.num_modules):
-            # Update the type probability space
-            module_type = ModuleType(int(np.argmax(self.type_p_space[i])))
-            self.type_p_space[i, :] = 0.0
-            self.type_p_space[i, module_type.value] = 1.0
+        # Module type from argmax of type probability space
+        type_from_argmax = np.argmax(self.type_p_space, axis=1)
+        self.type_dict = {
+            i: ModuleType(int(type_from_argmax[i]))
+            for i in range(self.num_modules)
+        }
 
-            # Update the rotation probability space
-            rotation_type = ModuleRotationsIdx(
-                int(np.argmax(self.rot_p_space[i])),
-            )
-            self.rot_p_space[i, :] = 0.0
-            self.rot_p_space[i, rotation_type.value] = 1.0
+        # Constrain rotations and connections based on module types
+        all_possible_faces = set(ModuleFaces)
+        all_possible_rotations = set(ModuleRotationsIdx)
+        for module_idx, module_type in self.type_dict.items():
+            # Constrain connections based on module type
+            allowed_faces = set(ALLOWED_FACES[module_type])
+            disallowed_faces = all_possible_faces - allowed_faces
+            for face in disallowed_faces:
+                # Disable as parent
+                self.conn_p_space[module_idx, :, face.value] = 0.0
+                # Disable as child
+                self.conn_p_space[:, module_idx, face.value] = 0.0
+
+            # Constrain rotations based on module type
+            allowed_rotations = set(ALLOWED_ROTATIONS[module_type])
+            disallowed_rotations = all_possible_rotations - allowed_rotations
+            for rotation in disallowed_rotations:
+                self.rot_p_space[module_idx, rotation.value] = 0.0
+
+        # Rotation type form argmax of rotation probability space
+        rot_from_argmax = np.argmax(self.rot_p_space, axis=1)
+        self.rot_dict = {
+            i: ModuleRotationsIdx(int(rot_from_argmax[i]))
+            for i in range(self.num_modules)
+        }
 
     def apply_connection_constraints(
         self,
@@ -237,39 +277,9 @@ class HighProbabilityDecoder:
         # Core is always a parent, never a child
         self.conn_p_space[:, IDX_OF_CORE, :] = 0.0
 
-        # Set the allowed faces for the module type
-        conn_p_space_mask = np.zeros_like(
-            self.conn_p_space,
-        )
-
-        # Set the allowed rotations for the module type
-        rot_p_space_mask = np.zeros_like(
-            self.rot_p_space,
-        )
-
-        # Face and rotation constraints
-        for i in range(self.num_modules):
-            # Get the type of the module
-            module_type = ModuleType(int(np.argmax(self.type_p_space[i])))
-
-            for face_i in ALLOWED_FACES[module_type]:
-                conn_p_space_mask[i, :, face_i.value] = 1.0
-
-            for rotation_i in ALLOWED_ROTATIONS[module_type]:
-                rot_p_space_mask[i, rotation_i.value] = 1.0
-
-        self.conn_p_space = np.multiply(
-            self.conn_p_space,
-            conn_p_space_mask,
-        )
-        self.rot_p_space = np.multiply(
-            self.rot_p_space,
-            rot_p_space_mask,
-        )
-
 
 def save_graph_as_json(
-    graph: DiGraph,
+    graph: DiGraph[Any],
     save_file: Path | str | None = None,
 ) -> None:
     """
@@ -292,8 +302,34 @@ def save_graph_as_json(
         f.write(json_string)
 
 
+def load_graph_from_json(
+    load_file: Path | str,
+) -> DiGraph[Any]:
+    """
+    Load a directed graph from a JSON file.
+
+    Parameters
+    ----------
+    load_file : Path | str
+        The file path to load the graph JSON.
+
+    Returns
+    -------
+    DiGraph
+        The loaded directed graph.
+    """
+    with Path(load_file).open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    return json_graph.node_link_graph(
+        data,
+        directed=True,
+        multigraph=False,
+        edges="edges",
+    )
+
+
 def draw_graph(
-    graph: DiGraph,
+    graph: DiGraph[Any],
     title: str = "NetworkX Directed Graph",
     save_file: Path | str | None = None,
 ) -> None:
@@ -315,19 +351,15 @@ def draw_graph(
 
     pos = nx.spring_layout(graph, pos=pos, k=1, iterations=20, seed=SEED)
 
-    options = {
-        "with_labels": True,
-        "node_size": 150,
-        "node_color": "#FFFFFF00",
-        "edgecolors": "blue",
-        "font_size": 8,
-        "width": 0.5,
-    }
-
     nx.draw(
         graph,
         pos,
-        **options,
+        with_labels=True,
+        node_size=150,
+        node_color="#FFFFFF00",
+        edgecolors="blue",
+        font_size=8,
+        width=0.5,
     )
 
     edge_labels = nx.get_edge_attributes(graph, "face")

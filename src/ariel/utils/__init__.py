@@ -1,1 +1,1 @@
-"""Robogen Lite."""
+"""ARIEL common utility functions and classes."""

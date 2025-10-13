@@ -1,17 +1,41 @@
-from .amphiteater_heightmap import AmphitheatreTerrainWorld
-from .boxy_heightmap import BoxyRugged
-from .crater_heightmap import CraterTerrainWorld
-from .djoser_pyramid import PyramidWorld
-from .rugged_heightmap import RuggedTerrainWorld
-from .simple_flat_world import SimpleFlatWorld
-from .simple_tilted_world import TiltedFlatWorld
+"""Pre-built MuJoCo environments."""
+
+from ariel.simulation.environments._amphitheatre import (
+    AmphitheatreTerrainWorld,
+)
+from ariel.simulation.environments._base_world import (
+    BaseWorld,
+)
+from ariel.simulation.environments._compound_world import (
+    CompoundWorld,
+)
+from ariel.simulation.environments._crater import (
+    CraterTerrainWorld,
+)
+from ariel.simulation.environments._rugged import (
+    RuggedTerrainWorld,
+)
+from ariel.simulation.environments._rugged_tilted import (
+    RuggedTiltedWorld,
+)
+from ariel.simulation.environments._simple_flat import (
+    SimpleFlatWorld,
+)
+from ariel.simulation.environments._simple_tilted import (
+    SimpleTiltedWorld,
+)
+from ariel.simulation.environments.olympic_arena import (
+    OlympicArena,
+)
 
 __all__ = [
     "AmphitheatreTerrainWorld",
-    "BoxyRugged",
+    "BaseWorld",
+    "CompoundWorld",
     "CraterTerrainWorld",
-    "PyramidWorld",
+    "OlympicArena",
     "RuggedTerrainWorld",
+    "RuggedTiltedWorld",
     "SimpleFlatWorld",
-    "TiltedFlatWorld",
+    "SimpleTiltedWorld",
 ]

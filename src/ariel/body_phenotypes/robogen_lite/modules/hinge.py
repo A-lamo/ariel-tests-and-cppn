@@ -1,8 +1,5 @@
 """TODO(jmdm): description of script.
 
-Date:       2025-07-08
-Status:     Completed ✅
-
 Todo:
 ----
     [ ] ".rotate" as superclass method?
@@ -24,7 +21,7 @@ SHRINK = 0.99
 type WeightType = float
 type DimensionType = tuple[float, float, float]
 
-# --- Robogen Configuration ---
+# --- Robogen Configuration --- #
 # Module weights (kg)
 STATOR_MASS: WeightType = 0.02  # 20 grams
 ROTOR_MASS: WeightType = 0.04  # 40 grams
@@ -32,21 +29,21 @@ ROTOR_MASS: WeightType = 0.04  # 40 grams
 # Module dimensions (length, width, height) in meters
 STATOR_DIMENSIONS: DimensionType = (0.025, 0.03, 0.025)
 ROTOR_DIMENSIONS: DimensionType = (0.025, 0.02, 0.025)
-# ------------------------------
+# ------------------------------ #
 
 
 class HingeModule(Module):
     """Hinge module specifications."""
 
     index: int | None = None
-    module_type: str = ModuleType.HINGE
+    module_type: ModuleType = ModuleType.HINGE
 
     def __init__(self, index: int) -> None:
-        """Initialize the brick module.
-        
+        """Initialize the hinge module.
+
         Parameters
         ----------
-        index : int
+        index
             The index of the hinge module being instantiated
         """
         # Set the index of the module
@@ -56,7 +53,7 @@ class HingeModule(Module):
         spec = mujoco.MjSpec()
 
         # ========= Hinge =========
-        hinge_name = "hinge"
+        hinge_name = self.module_type.name.lower()
         hinge = spec.worldbody.add_body(
             name=hinge_name,
             mass=STATOR_MASS + ROTOR_MASS,
@@ -126,7 +123,7 @@ class HingeModule(Module):
             bodyname2=rotor_name,
         )
 
-        # --- Actuator(s) ---
+        # --- Actuator(s) --- #
         dyntype = mujoco.mjtDyn.mjDYN_NONE
         gaintype = mujoco.mjtGain.mjGAIN_FIXED
         biastype = mujoco.mjtBias.mjBIAS_AFFINE
@@ -141,7 +138,10 @@ class HingeModule(Module):
             biasprm=biasprm,
             trntype=trntype,
             target=servo_name,
-            ctrlrange=(-np.pi/2, np.pi/2),  # [-90, 90] degrees (range of 180)
+            ctrlrange=(
+                -np.pi / 2,
+                np.pi / 2,
+            ),  # [-90, 90] degrees (range of 180)
         )
 
         # Save model specifications
@@ -158,7 +158,7 @@ class HingeModule(Module):
 
         Parameters
         ----------
-        angle : float
+        angle
             The angle in degrees to rotate the hinge.
         """
         # Convert angle to quaternion
@@ -169,5 +169,5 @@ class HingeModule(Module):
         ])
         quat = np.roll(qnp.as_float_array(quat), shift=-1)
 
-        # Set the quaternion for the brick body
+        # Set the quaternion for the hinge body
         self.body.quat = np.round(quat, decimals=3)
