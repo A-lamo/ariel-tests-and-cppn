@@ -1,4 +1,5 @@
 import random
+from typing import Callable
 from .node import Node
 from .connection import Connection
 from .activations import ACTIVATION_FUNCTIONS, DEFAULT_ACTIVATION 
@@ -25,8 +26,7 @@ class Genome:
     def _get_random_bias():
         return random.uniform(-1.0, 1.0)
 
-    @staticmethod
-    def _get_random_activation():
+    def _get_random_activation() -> Callable:
         """Selects a random activation function from the available list."""
         return random.choice(ACTIVATION_FUNCTIONS)
         
