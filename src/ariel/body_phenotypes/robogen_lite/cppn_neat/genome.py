@@ -26,10 +26,29 @@ class Genome:
     def _get_random_bias():
         return random.uniform(-1.0, 1.0)
 
-    def _get_random_activation() -> Callable:
+    @staticmethod
+    def _get_random_activation():
         """Selects a random activation function from the available list."""
         return random.choice(ACTIVATION_FUNCTIONS)
         
+    def copy(self):
+        """Returns a new Genome object with identical, deep-copied gene sets."""
+        
+        # Deep copy nodes (Node class has a copy method)
+        new_nodes = {
+            _id: node.copy()
+            for _id, node in self.nodes.items()
+        }
+        
+        # Deep copy connections (Connection class has a copy method)
+        new_connections = {
+            innov_id: conn.copy() 
+            for innov_id, conn in self.connections.items()
+        }
+        
+        # Return a new Genome instance
+        return Genome(new_nodes, new_connections, self.fitness)
+
     @classmethod
     def random(cls, 
                num_inputs: int, 
@@ -70,9 +89,6 @@ class Genome:
                 connections[current_innov_id] = connection
                 current_innov_id += 1 # Increment for the next unique innovation ID
 
-        # Note: You should update next_node_id and next_innov_id in your main program
-        # after calling this to maintain global uniqueness.
-
         return cls(nodes, connections, fitness=0.0)
     
 
@@ -86,11 +102,9 @@ class Genome:
         Applies structural mutation (add_node or add_connection).
         """
 
-        # --- A. Mutate: Add Connection ---
         if random.random() < conn_add_rate:
             self._mutate_add_connection(next_innov_id_getter)
         
-        # --- B. Mutate: Add Node ---
         if random.random() < node_add_rate:
             self._mutate_add_node(next_innov_id_getter, next_node_id_getter)
 
@@ -98,15 +112,14 @@ class Genome:
         """Attempts to add a new connection between two existing, non-connected nodes."""
         
         all_nodes = list(self.nodes.keys())
-        # Ensure there are at least two nodes
+        # We need at least two nodes to form a connection
         if len(all_nodes) < 2:
             return
 
         # Pick two random distinct nodes
         in_id, out_id = random.sample(all_nodes, 2)
 
-        # Simple check to prevent connection from output to input
-        # Assuming feed-forward structure for simplicity here.
+        # (I assume a feed-forward structure)
         if self.nodes[out_id].typ == 'input':
             in_id, out_id = out_id, in_id # Swap to ensure input to non-input
 
@@ -124,9 +137,10 @@ class Genome:
 
 
     def _mutate_add_node(self, next_innov_id_getter, next_node_id_getter):
-        """Splits an existing connection by inserting a new node."""
+        """
+        Splits an existing connection by inserting a new (hidden) node.
+        """
 
-        # Must have connections to split
         if not self.connections:
             return
 
@@ -141,34 +155,32 @@ class Genome:
         new_node = Node(
             _id=new_node_id, 
             typ='hidden', 
-            # Use the random activation function
             activation=self._get_random_activation(), 
             bias=self._get_random_bias()
         )
         self.add_node(new_node)
         
-        # 4. Create the first new connection (in_id -> new_node_id)
+        # 4. Create the first new connection (in -> new_node)
         innov_id_1 = next_innov_id_getter()
         conn1 = Connection(
             in_id=conn_to_split.in_id,
             out_id=new_node_id,
-            weight=1.0, # Standard NEAT practice
+            weight=1.0,  # Standard NEAT practice
             enabled=True,
             innov_id=innov_id_1
         )
         self.add_connection(conn1)
 
-        # 5. Create the second new connection (new_node_id -> out_id)
+        # 5. Create the second new connection (new_node -> out)
         innov_id_2 = next_innov_id_getter()
         conn2 = Connection(
             in_id=new_node_id,
             out_id=conn_to_split.out_id,
-            weight=conn_to_split.weight, # Preserve original weight
+            weight=conn_to_split.weight,  # Preserve original weight
             enabled=True,
             innov_id=innov_id_2
         )
         self.add_connection(conn2)
-
 
     def crossover(self, other: 'Genome') -> 'Genome':
         """
@@ -188,7 +200,6 @@ class Genome:
              fitter_parent = other
              less_fit_parent = self
         
-        
         offspring_node_genes = {}
         offspring_connection_genes = {}
         
@@ -199,17 +210,17 @@ class Genome:
             conn_a = fitter_parent.connections.get(innov_id)
             conn_b = less_fit_parent.connections.get(innov_id)
             
-            # --- Matching Genes (Innovation ID is the same) ---
+            # We need matching Genes (Innovation ID's)
             if conn_a and conn_b:
-                # Inherit randomly (or choose from the fitter parent if a gene is disabled)
+                # Inherit randomly 
                 chosen_conn = random.choice([conn_a, conn_b])
                 
-                # Copying the chosen connection
+                # Copy the chosen connection
                 offspring_connection_genes[innov_id] = chosen_conn.copy() 
                 
-            # --- Disjoint/Excess Genes (Innovation ID is only in one parent) ---
+            # Disjoint/Excess Genes (Innovation ID is only in one parent)
             elif conn_a:
-                # Inherit from the Fitter Parent (MUST be kept)
+                # Inherit from the Fitter Parent 
                 offspring_connection_genes[innov_id] = conn_a.copy()
             
             elif conn_b:
@@ -243,7 +254,6 @@ class Genome:
         # 3. Create and return the new Genome
         return Genome(offspring_node_genes, offspring_connection_genes, fitness=0.0)
 
-    
 
     def add_connection(self, connection: Connection):
         """Adds a connection gene to the genome."""
@@ -259,25 +269,53 @@ class Genome:
         else:
             raise ValueError("Node already exists in genome.")
         
-
     def get_node_ordering(self):
         """
-        Calculates a simple topological sort order for feed-forward activation.
-        This is a basic approach and doesn't handle recurrence (loops).
+        Calculates a topological sort order for feed-forward activation using Kahn's algorithm.
+        This ensures a node is evaluated only after all its input nodes are ready.
+        https://www.geeksforgeeks.org/dsa/topological-sorting-indegree-based-solution/
         """
-        input_nodes = [_id for _id, node in self.nodes.items() if node.typ == 'input']
-        output_nodes = [_id for _id, node in self.nodes.items() if node.typ == 'output']
-        
-        # Simple heuristic: assume all nodes not input/output are hidden and order them between.
-        # For a truly robust NEAT/CPPN, this requires a proper topological sort.
-        hidden_nodes = sorted([_id for _id in self.nodes.keys() if _id not in input_nodes and _id not in output_nodes])
+        # 1. Build the graph structure and count incoming connections (in-degrees) for each node.
+        graph = {node_id: [] for node_id in self.nodes}
+        in_degree = {node_id: 0 for node_id in self.nodes}
 
-        return input_nodes + hidden_nodes + output_nodes
+        for conn in self.connections.values():
+            if conn.enabled:
+                # An edge goes from the input node to the output node
+                graph[conn.in_id].append(conn.out_id)
+                # The output node gains an incoming connection
+                in_degree[conn.out_id] += 1
+
+        # 2. Initialize a queue with all nodes that have no incoming connections.
+        # These are the network's starting points (i.e., the input nodes).
+        queue = [node_id for node_id in self.nodes if in_degree[node_id] == 0]
+        
+        sorted_order = []
+        
+        # 3. Process nodes in the queue.
+        while queue:
+            # Dequeue a node that is ready to be evaluated.
+            node_id = queue.pop(0)
+            sorted_order.append(node_id)
+
+            # For the node we just processed, "remove" its outgoing edges.
+            for neighbor_id in graph[node_id]:
+                in_degree[neighbor_id] -= 1
+                # If a neighbor's in-degree drops to 0, it's now ready to be evaluated.
+                if in_degree[neighbor_id] == 0:
+                    queue.append(neighbor_id)
+
+        # 4. Final check: If the sorted order doesn't include all nodes,
+        # this means there was a cycle in the graph (a recurrent connection).
+        if len(sorted_order) != len(self.nodes):
+            # For a feed-forward CPPN, this indicates an issue.
+            raise Exception("A cycle was detected in the genome's graph, cannot create a feed-forward order.")
+            
+        return sorted_order
     
     def activate(self, inputs: list[float]) -> list[float]:
         """
-        Runs the forward pass through the CPPN using the given inputs (X, Y, D).
-        Returns a list of output values (R, G, B).
+        Activates the neural network by performing a forward pass with a given list of inputs.
         """
         
         node_outputs = {}
@@ -297,11 +335,10 @@ class Genome:
         for node_id in ordered_node_ids:
             node = self.nodes[node_id]
             
-            # Skip input nodes, already handled
+            # Skip input nodes
             if node.typ == 'input':
                 continue
 
-            # Sum of weighted inputs
             weighted_sum = 0.0
             
             # Find all connections where this node is the output
@@ -314,15 +351,11 @@ class Genome:
             
             # Add bias
             weighted_sum += node.bias
-            
+    
             # Apply activation function
-            # Output nodes typically use an activation (e.g., tanh, sigmoid) to clamp the color range
-            if node.activation:
-                node_outputs[node_id] = node.activation(weighted_sum)
-            else:
-                 node_outputs[node_id] = weighted_sum # Should not happen for hidden/output nodes
+            node_outputs[node_id] = node.activation(weighted_sum)
 
-        # 3. Collect Output Values (R, G, B)
+        # 3. Collect Output Values from Output Nodes
         output_node_ids = [_id for _id, node in self.nodes.items() if node.typ == 'output']
         
         return [node_outputs[_id] for _id in output_node_ids]

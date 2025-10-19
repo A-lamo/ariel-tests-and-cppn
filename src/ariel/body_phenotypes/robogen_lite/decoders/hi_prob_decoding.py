@@ -26,7 +26,7 @@ from typing import Any
 
 # Third-party libraries
 import matplotlib
-matplotlib.use('Qt5Agg')
+matplotlib.use('QtAgg')
 
 import matplotlib.pyplot as plt
 import networkx as nx
