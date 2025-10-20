@@ -1,5 +1,4 @@
 import random
-from typing import Callable
 from .node import Node
 from .connection import Connection
 from .activations import ACTIVATION_FUNCTIONS, DEFAULT_ACTIVATION 
@@ -74,7 +73,7 @@ class Genome:
             node = Node(
                 _id=current_node_id, 
                 typ='output', 
-                activation=cls._get_random_activation(), 
+                activation=DEFAULT_ACTIVATION, 
                 bias=cls._get_random_bias()
             )
             nodes[current_node_id] = node

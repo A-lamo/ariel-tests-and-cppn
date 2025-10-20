@@ -51,8 +51,8 @@ if __name__ == "__main__":
     console.rule("[bold green]CPPN Morphology Generation with Improved Growth[/bold green]")
     
     #Choose the decoder type and parameters
-    DECODER_TYPE = "best_first"  # "best_first" or "bfs"
-    CORE_BIAS_VALUE = 0.0  # Try values like 0.5, 1.0, 5.0. (Only for BFS though, but I don't know how much it helps yet lol)
+    DECODER_TYPE = "bfs"  # "best_first" or "bfs"
+    CORE_BIAS_VALUE = 5.0  # Try values like 0.5, 1.0, 5.0. (Only for BFS though, but I don't know how much it helps yet lol)
     
     MAX_MODULES = 20
     MAX_ATTEMPTS = 10 # Number of attempts to find a morphology that's not just a core lol
@@ -87,7 +87,7 @@ if __name__ == "__main__":
             )
         
         decoded_robot_graph = decoder.decode()
-
+        
         num_nodes = decoded_robot_graph.number_of_nodes() if decoded_robot_graph else 0
         if num_nodes >= MAX_MODULES:
             console.log(f"[bold green]Success! Found a morphology with {num_nodes} modules.[/bold green]")

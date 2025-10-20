@@ -31,4 +31,4 @@ ACTIVATION_FUNCTIONS = [
     # Add more functions here (e.g., 'cos_act', 'identity', 'step')
 ]
 
-DEFAULT_ACTIVATION = tanh
+DEFAULT_ACTIVATION = sigmoid

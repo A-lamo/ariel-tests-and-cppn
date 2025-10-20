@@ -47,11 +47,12 @@ class MorphologyDecoderBFS:
         next_module_id = 1
         current_layer = [core_id]
 
-        while current_layer and len(robot_graph) < self.max_modules:
+        while current_layer:
             next_layer = []
             
             for parent_id in current_layer:
-                if len(robot_graph) >= self.max_modules: break
+                if len(robot_graph) >= self.max_modules:
+                    break
 
                 potential_children = []
                 parent_pos = module_data[parent_id]['pos']
