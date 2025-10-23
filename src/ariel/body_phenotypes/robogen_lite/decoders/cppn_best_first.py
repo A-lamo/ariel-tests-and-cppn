@@ -2,7 +2,7 @@ import numpy as np
 import numpy.typing as npt
 from rich.console import Console
 import networkx as nx
-
+from src.ariel.body_phenotypes.robogen_lite.cppn_neat.genome import Genome
 from ariel.body_phenotypes.robogen_lite.config import (
     ALLOWED_FACES,
     ALLOWED_ROTATIONS,
@@ -12,8 +12,6 @@ from ariel.body_phenotypes.robogen_lite.config import (
     ModuleType,
     NUM_OF_TYPES_OF_MODULES,
 )
-
-from src.ariel.body_phenotypes.robogen_lite.cppn_neat.genome import Genome
 console = Console()
 
 
@@ -62,12 +60,12 @@ class MorphologyDecoderBestFirst:
                 for face in ModuleFaces:
                     
                     if face not in ALLOWED_FACES[parent_type]:
-                        continue
+                        break
                     
                     child_pos = self._get_child_coords(parent_pos, face)
                     
                     if child_pos in occupied_coords:
-                        continue
+                        break
 
                     cppn_inputs = list(parent_pos) + list(child_pos)
                     raw_outputs = self.cppn_genome.activate(cppn_inputs)
@@ -75,22 +73,25 @@ class MorphologyDecoderBestFirst:
                     conn_score = raw_outputs[0]
                     type_scores = np.array(raw_outputs[1:1+NUM_OF_TYPES_OF_MODULES])
                     rot_scores = np.array(raw_outputs[1+NUM_OF_TYPES_OF_MODULES:])
-                    
-                    child_type = ModuleType(np.argmax(softmax(type_scores)))
+
+                    type_probs = softmax(type_scores)
+
+                    type_probs[ModuleType.NONE.value] = -1.0 # Ignore NONE if that's the output
+                    type_probs[ModuleType.CORE.value] = -1.0 # Ignore CORE if that's the output
+
+                    child_type = ModuleType(np.argmax(type_probs))
                     child_rot = ModuleRotationsIdx(np.argmax(softmax(rot_scores)))
-                    
-                    if child_type not in (ModuleType.NONE, ModuleType.CORE) and \
-                       face in ALLOWED_FACES[child_type] and child_rot in ALLOWED_ROTATIONS[child_type]:
+
+                    if face in ALLOWED_FACES[child_type] and child_rot in ALLOWED_ROTATIONS[child_type]:
                         potential_connections.append({
                             'score': conn_score, 'parent_id': parent_id, 'child_pos': child_pos,
                             'child_type': child_type, 'child_rot': child_rot, 'face': face,
                         })
 
             if not potential_connections:
-                # If there are no possible moves anywhere, we have to stop.
                 console.log("[yellow]Decoder stalled: No valid connections found anywhere on the robot.[/yellow]")
                 break
-            
+
             best_conn = max(potential_connections, key=lambda x: x['score'])
             
             child_id = next_module_id
