@@ -27,6 +27,18 @@ uv sync
 uv run examples/0_render_single_frame.py
 ```
 
+## CPPN stuff!
+Check Out the CPPN Genome in the src/ariel/body_phenotypes/robogen_lite/cppn_neat folder.
+
+The associated decoder for the Genome lives where the previous hpd lives,
+i.e. src/ariel/body_phenotypes/robogen_lite/decoders/
+
+Finally to run it use the cppn_decoding.py file.
+```
+python3 -m src.ariel.ec.genotypes.cppn.cppn_decoding
+
+```
+
 <!-- ## TODO: Installation
 
 ## Notes
