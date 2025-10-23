@@ -44,32 +44,33 @@ def run(robot: CoreModule, *, with_viewer: bool = False) -> None:
 
 if __name__ == "__main__":    
     DECODER_TYPE = "best_first"
-    MAX_MODULES = 20
-    num_initial_mutations = 0
+    MAX_MODULES = 5
+    num_initial_mutations = 5
     
     T, R = NUM_OF_TYPES_OF_MODULES, NUM_OF_ROTATIONS
     NUM_CPPN_INPUTS, NUM_CPPN_OUTPUTS = 6, 1 + T + R
     
-    # 1. Define the starting innovation ID for the first genome.
-    initial_innov_id = NUM_CPPN_INPUTS * NUM_CPPN_OUTPUTS
+    # 1. Define the starting innovation ID for the first genome as 0.
+    initial_innov_id = 0 
 
-    # 2. Calculate the next available ID AFTER the first genome is created.
-    next_available_innov_id = initial_innov_id + (NUM_CPPN_INPUTS * NUM_CPPN_OUTPUTS)
+    # 2. Calculate how many connections will be created.
+    num_initial_conns = NUM_CPPN_INPUTS * NUM_CPPN_OUTPUTS
     
-    # 3. Initialize the IdManager correctly.
+    # 3. Initialize the IdManager. Its last-used ID is (num_conns - 1).
     id_manager = IdManager(
-        node_start=NUM_CPPN_INPUTS + NUM_CPPN_OUTPUTS - 1,
-        innov_start=next_available_innov_id - 1
+        node_start=NUM_CPPN_INPUTS + NUM_CPPN_OUTPUTS - 1, 
+        innov_start=num_initial_conns - 1  # we have 78 conns (6 inputs * 13 outputs) --> last ID is 77 
     )
+    
     # 4. Create the initial random genome.
     my_cppn_genome = Genome.random(
         num_inputs=NUM_CPPN_INPUTS, num_outputs=NUM_CPPN_OUTPUTS,
         next_node_id=(NUM_CPPN_INPUTS + NUM_CPPN_OUTPUTS),
-        next_innov_id=initial_innov_id, 
+        next_innov_id=initial_innov_id, # This is now 0
     )
 
     # 5. Apply initial mutations to the genome.
-    #  (this was done in old revolve2, and it makes sense to keep it but it's optional)
+    # (this was done in old revolve2, and it makes sense to keep it but it's optional)
     for i in range(num_initial_mutations):
         print(f"Applying mutation {i+1}/{num_initial_mutations}...")
         my_cppn_genome.mutate(
@@ -89,7 +90,6 @@ if __name__ == "__main__":
         max_modules=MAX_MODULES
     )
     decoded_robot_graph = decoder.decode()
-
 
     console.log(f"[bold green]Success! Found a morphology with {decoded_robot_graph.number_of_nodes()} modules.[/bold green]")
     final_robot_graph = decoded_robot_graph
