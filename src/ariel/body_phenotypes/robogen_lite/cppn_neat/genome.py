@@ -184,14 +184,17 @@ class Genome:
     def crossover(self, other: 'Genome') -> 'Genome':
         """
         Creates a new offspring Genome by crossing over this Genome (parent A) 
-        and another Genome (parent B). Parent A is assumed to be the fitter parent 
-        (or equally fit).
+        and another Genome (parent B).
         """
         
-        # Determine the fitter parent (Parent A is 'self')
-        parent_a_is_fitter = self.fitness >= other.fitness
-        fitter_parent = self
-        less_fit_parent = other
+        # Determine the fitter parent
+        if self.fitness >= other.fitness:
+            fitter_parent = self
+            less_fit_parent = other
+        else:
+            # make the fitter parent the parent "B"
+            fitter_parent = other
+            less_fit_parent = self
         
         # If fitnesses are equal, the shorter genome (fewer genes) should be the 'less_fit_parent' 
         # to ensure symmetry in gene inheritance.
@@ -202,7 +205,7 @@ class Genome:
         offspring_node_genes = {}
         offspring_connection_genes = {}
         
-        # 1. Crossover Connection Genes
+        # 1. Crossover Connection Genes (nothing fancy, just a using the set operator OR here)
         all_innov_ids = set(fitter_parent.connections.keys()) | set(less_fit_parent.connections.keys())
         
         for innov_id in all_innov_ids:
@@ -242,13 +245,7 @@ class Genome:
             # Nodes are inherited without structural change, just copy the properties
             node_gene = combined_nodes.get(node_id)
             if node_gene:
-                # Simple copy (not a deep copy, but for basic attributes it's okay)
-                offspring_node_genes[node_id] = Node(
-                    node_gene._id, 
-                    node_gene.typ, 
-                    node_gene.activation, 
-                    node_gene.bias
-                )
+                offspring_node_genes[node_id] = node_gene.copy()
             
         # 3. Create and return the new Genome
         return Genome(offspring_node_genes, offspring_connection_genes, fitness=0.0)
