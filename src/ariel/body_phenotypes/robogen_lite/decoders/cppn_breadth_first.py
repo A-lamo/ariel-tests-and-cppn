@@ -1,3 +1,7 @@
+"""
+Experimental CPPN decoder, that isn't working yet.
+"""
+
 import numpy as np
 import numpy.typing as npt
 from rich.console import Console
