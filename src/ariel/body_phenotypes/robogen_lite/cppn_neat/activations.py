@@ -20,15 +20,12 @@ def relu(x: int) -> float:
     """Rectified Linear Unit."""
     return max(0.0, x)
 
-# A list of all available activation functions
-# Note: Functions are first-class objects in Python, so we can store them in a list.
-ACTIVATION_FUNCTIONS = [
-    sigmoid,
-    tanh,
-    sin_act,
-    gaussian,
-    relu,
-    # Add more functions here (e.g., 'cos_act', 'identity', 'step')
-]
+ACTIVATION_FUNCTIONS = {
+    "sigmoid": sigmoid,
+    "tanh": tanh,
+    "sin": sin_act,
+    "gaussian": gaussian,
+    "relu": relu,
+}
 
-DEFAULT_ACTIVATION = tanh
+DEFAULT_ACTIVATION = "tanh"
